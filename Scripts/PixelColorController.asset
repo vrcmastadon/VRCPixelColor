@@ -12,7 +12,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: c333ccfdd0cbdbc4ca30cef2dd6e6b9b, type: 3}
   m_Name: PixelColorController
   m_EditorClassIdentifier: 
-  serializedUdonProgramAsset: {fileID: 11400000, guid: cbe9186fe8818f0408f184e470682525,
+  serializedUdonProgramAsset: {fileID: 11400000, guid: a092acfc6dc7fb44aa28b0a50e2ef476,
     type: 2}
   udonAssembly: 
   assemblyError: 
@@ -101,8 +101,7 @@ MonoBehaviour:
       Data: 6|UnityEngine.TooltipAttribute, UnityEngine.CoreModule
     - Name: tooltip
       Entry: 1
-      Data: "RenderTexture \u0438\u0437 VideoTXL (\u0438\u043B\u0438 \u0434\u0440\u0443\u0433\u0430\u044F
-        Texture)"
+      Data: RenderTexture from VideoTXL (or any Texture)
     - Name: 
       Entry: 8
       Data: 
@@ -165,8 +164,7 @@ MonoBehaviour:
       Data: 10|UnityEngine.TooltipAttribute, UnityEngine.CoreModule
     - Name: tooltip
       Entry: 1
-      Data: "UV \u043A\u043E\u043E\u0440\u0434\u0438\u043D\u0430\u0442\u044B (0..1)
-        \u0442\u043E\u0447\u043A\u0438 \u0432\u044B\u0431\u043E\u0440\u043A\u0438"
+      Data: UV coordinates (0..1) for the sampling point
     - Name: 
       Entry: 8
       Data: 
@@ -238,8 +236,7 @@ MonoBehaviour:
       Data: 15|UnityEngine.TooltipAttribute, UnityEngine.CoreModule
     - Name: tooltip
       Entry: 1
-      Data: "\u041C\u0430\u0442\u0435\u0440\u0438\u0430\u043B \u043D\u0430 \u0448\u0435\u0439\u0434\u0435\u0440\u0435
-        Unlit/PickUV_Udon"
+      Data: Material that uses Unlit/PickUV_Udon shader
     - Name: 
       Entry: 8
       Data: 
@@ -311,9 +308,7 @@ MonoBehaviour:
       Data: 20|UnityEngine.TooltipAttribute, UnityEngine.CoreModule
     - Name: tooltip
       Entry: 1
-      Data: "\u0421\u044D\u043C\u043F\u043B\u0438\u0440\u043E\u0432\u0430\u0442\u044C
-        \u0440\u0430\u0437 \u0432 N \u043A\u0430\u0434\u0440\u043E\u0432 (1 = \u043A\u0430\u0436\u0434\u044B\u0439
-        \u043A\u0430\u0434\u0440)"
+      Data: Sample every N frames (1 = every frame)
     - Name: 
       Entry: 8
       Data: 
@@ -439,8 +434,7 @@ MonoBehaviour:
       Data: 28|UnityEngine.TooltipAttribute, UnityEngine.CoreModule
     - Name: tooltip
       Entry: 1
-      Data: "\u0421\u044E\u0434\u0430 \u043C\u043E\u0436\u043D\u043E \u043F\u043E\u0432\u0435\u0441\u0438\u0442\u044C
-        Quad/Plane \u2014 \u043F\u043E\u043A\u0430\u0436\u0435\u043C \u043F\u0440\u0435\u0432\u044C\u044E"
+      Data: Optional preview receiver (Quad/Plane) to show the raw 1x1 RT
     - Name: 
       Entry: 8
       Data: 

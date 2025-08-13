@@ -1,69 +1,83 @@
 ﻿using UdonSharp;
 using UnityEngine;
 using VRC.Udon;
-#if AUDIOLINK
-using AudioLink;
-#endif
 
-// Top-level enum (UdonSharp не поддерживает вложенные)
-public enum PixelColorAudioBand { Bass = 0, LowMid = 1, HighMid = 2, Treble = 3 }
-
+/// <summary>
+/// Receives RAW color from PixelColorController, applies optional processing,
+/// smooths it, and writes to targets (Lights, Renderers via MPB, ParticleSystems, PointLightVolumes).
+/// AudioLink integration was intentionally removed to avoid CPU-side latency.
+/// </summary>
 public class PixelColorReceiver : UdonSharpBehaviour
 {
     [Header("Source (Controller)")]
+    [Tooltip("Reference to PixelColorController that provides the sampled RAW color.")]
     public PixelColorController controller;
 
     [Header("Targeting Mode")]
+    [Tooltip("If enabled, manual lists are ignored and components are discovered automatically.")]
     public bool useAutoTargets = true;
+    [Tooltip("In auto mode: also search for components in children.")]
     public bool autoIncludeChildren = true;
 
     [Header("Color Processing")]
+    [Tooltip("Normalize brightness toward the brightest channel.")]
     public bool boostBrightness = true;
+    [Tooltip("0 = off, 1 = fully normalize to the brightest channel.")]
     [Range(0f, 1f)] public float brightenAmount = 1f;
+
+    [Tooltip("Boost or reduce saturation via HSV.")]
     public bool boostSaturation = true;
+    [Tooltip("0 = grayscale, 1 = unchanged, >1 = boost (clamped to 1).")]
     [Range(0f, 5f)] public float saturationMultiplier = 1.5f;
+
+    [Tooltip("If brightness is below threshold, force white.")]
     public bool blackToWhite = true;
+    [Tooltip("Max channel <= threshold -> output becomes white.")]
     [Range(0f, 0.1f)] public float blackThreshold = 0.01f;
+
+    [Tooltip("Final intensity multiplier applied after all processing.")]
     public float globalIntensity = 1f;
 
-#if AUDIOLINK
-    [Header("AudioLink")]
-    public AudioLink.AudioLink audioLink;
-    public bool useAudioLink = false;
-    public PixelColorAudioBand audioBand = PixelColorAudioBand.Bass;
-    [Range(0, 127)] public int audioDelay = 0;
-    [Tooltip("Brightness multiplier when AudioLink signal is at peak (default 2)")]
-    public float audioLinkPeakMultiplier = 2f;
-#endif
-
     [Header("Temporal Smoothing")]
+    [Tooltip("0 = instant, 1 = heavy smoothing.")]
     [Range(0f, 1f)] public float smooth = 0.2f;
 
     [Header("Output: Unity Lights")]
+    [Tooltip("Manual mode only: explicit list of Unity Lights to color.")]
     public Light[] targetLights;
 
     [Header("Output: Renderers")]
+    [Tooltip("Manual mode only: explicit list of renderers to color via MaterialPropertyBlock.")]
     public Renderer[] targetRenderers;
+    [Tooltip("Material color properties to set (e.g. _EmissionColor, _Color, _BaseColor).")]
     public string[] materialColorProperties = new string[] { "_EmissionColor" };
 
     [Header("Output: Particle Systems")]
+    [Tooltip("Manual mode only: explicit list of particle systems to color.")]
     public ParticleSystem[] targetParticleSystems;
+    [Tooltip("Apply color to ParticleSystem.Main.startColor.")]
     public bool particleApplyStartColor = false;
+    [Tooltip("Apply color to ParticleSystem.ColorOverLifetime gradient.")]
     public bool particleApplyColorOverLifetime = true;
+    [Tooltip("When using ColorOverLifetime, fade in/out alpha (0 -> peak -> 0).")]
     public bool particleFadeInOut = true;
+    [Tooltip("Alpha for particle colors.")]
     [Range(0f, 1f)] public float particleAlpha = 1f;
 
     [Header("Output: Alternative Lights (PointLightVolume)")]
+    [Tooltip("Manual mode only: UdonBehaviours of VRCLightVolumes (PointLightVolumeInstance). 'Color' program variable will be set.")]
     public UdonBehaviour[] targetPointLightVolumes;
 
-    // Internal
+    // Internal state
     private Color _smoothed = Color.white;
 
+    // Auto-target caches
     private Light[] _autoLights;
     private Renderer[] _autoRenderers;
     private ParticleSystem[] _autoPS;
     private UdonBehaviour[] _autoPointLightVolumes;
 
+    // Gradient cache for Particle ColorOverLifetime
     private Gradient _colGradient;
     private GradientColorKey[] _gradColorKeys2 = new GradientColorKey[2];
     private GradientAlphaKey[] _gradAlphaKeys2 = new GradientAlphaKey[2];
@@ -78,6 +92,7 @@ public class PixelColorReceiver : UdonSharpBehaviour
             return;
         }
 
+        // Init gradient keys (constant times)
         _colGradient = new Gradient();
         _gradColorKeys2[0].time = 0f; _gradColorKeys2[1].time = 1f;
         _gradAlphaKeys2[0].time = 0f; _gradAlphaKeys2[1].time = 1f;
@@ -85,6 +100,7 @@ public class PixelColorReceiver : UdonSharpBehaviour
 
         _smoothed = controller.GetLastColorRaw();
 
+        // Cache auto-targets if requested
         if (useAutoTargets)
         {
             if (autoIncludeChildren)
@@ -102,16 +118,14 @@ public class PixelColorReceiver : UdonSharpBehaviour
                 _autoPointLightVolumes = GetComponents<UdonBehaviour>();
             }
         }
-
-#if AUDIOLINK
-        if (audioLink != null) audioLink.EnableReadback();
-#endif
     }
 
     void LateUpdate()
     {
+        // 1) Fetch RAW color
         Color c = controller.GetLastColorRaw();
 
+        // 2) Processing
         float maxCh = Mathf.Max(c.r, Mathf.Max(c.g, c.b));
 
         if (blackToWhite && maxCh <= blackThreshold)
@@ -120,6 +134,7 @@ public class PixelColorReceiver : UdonSharpBehaviour
         }
         else if (boostBrightness && maxCh > 0f)
         {
+            // Normalize towards the max channel
             float kFull = 1f / maxCh;
             float k = Mathf.Lerp(1f, kFull, Mathf.Clamp01(brightenAmount));
             c *= k;
@@ -134,29 +149,18 @@ public class PixelColorReceiver : UdonSharpBehaviour
             c = Color.HSVToRGB(h, s, v);
         }
 
-#if AUDIOLINK
-        if (useAudioLink && audioLink != null)
-        {
-            int band = (int)audioBand;
-            Color sample = audioLink.GetDataAtPixel(audioDelay, band);
-            float amp = Mathf.Max(sample.r, Mathf.Max(sample.g, sample.b));
-            amp = Mathf.Clamp01(amp);
-
-            // Применяем множитель в момент пика
-            c *= amp * audioLinkPeakMultiplier;
-        }
-#endif
-
         if (globalIntensity != 1f)
         {
             c *= Mathf.Max(0f, globalIntensity);
         }
 
+        // 3) Temporal smoothing (exponential)
         float frames = Time.deltaTime * 60f;
-        float perFrame = Mathf.Lerp(1f, 0.05f, Mathf.Clamp01(smooth));
+        float perFrame = Mathf.Lerp(1f, 0.05f, Mathf.Clamp01(smooth)); // 0 -> instant, 1 -> heavy smoothing
         float t = 1f - Mathf.Pow(1f - perFrame, frames);
         _smoothed = Color.Lerp(_smoothed, c, t);
 
+        // 4) Apply to targets
         if (useAutoTargets)
         {
             ApplyLights(_autoLights, _smoothed);
@@ -258,9 +262,11 @@ public class PixelColorReceiver : UdonSharpBehaviour
         {
             var ub = volumes[i];
             if (ub == null) continue;
+            // VRCLightVolumes typically expose 'Color' as a public program variable
             ub.SetProgramVariable("Color", col);
         }
     }
 
+    // Public getter if other Udon scripts need the smoothed color
     public Color GetObjectColorSmoothed() { return _smoothed; }
 }

@@ -8,33 +8,33 @@ using VRC.Udon.Common.Interfaces;
 public class PixelColorController : UdonSharpBehaviour
 {
     [Header("Source")]
-    [Tooltip("RenderTexture из VideoTXL (или другая Texture)")]
+    [Tooltip("RenderTexture from VideoTXL (or any Texture)")]
     public RenderTexture sourceRT;
-    [Tooltip("UV координаты (0..1) точки выборки")]
+    [Tooltip("UV coordinates (0..1) for the sampling point")]
     public Vector2 uv = new Vector2(0.5f, 0.5f);
 
     [Header("Blit Material (Unlit/PickUV_Udon)")]
-    [Tooltip("Материал на шейдере Unlit/PickUV_Udon")]
+    [Tooltip("Material that uses Unlit/PickUV_Udon shader")]
     public Material pickUVMaterial;
 
     [Header("Sampling")]
-    [Tooltip("Сэмплировать раз в N кадров (1 = каждый кадр)")]
+    [Tooltip("Sample every N frames (1 = every frame)")]
     public int sampleEveryNFrames = 1;
 
     [Header("Debug")]
     public bool debugLog = true;
-    [Tooltip("Сюда можно повесить Quad/Plane — покажем превью")]
+    [Tooltip("Optional preview receiver (Quad/Plane) to show the raw 1x1 RT")]
     public Renderer debugPreviewReceiver;
     public string debugPreviewProperty = "_MainTex";
 
-    // --- внутреннее ---
-    private RenderTexture _rt1x1;              // сырая 1×1 RT из источника
+    // --- internal ---
+    private RenderTexture _rt1x1;              // raw 1×1 RT from source
     private bool _readbackPending;
     private int _frame;
-    private readonly Color32[] _pxBuf = new Color32[1]; // буфер 1 пикселя
+    private readonly Color32[] _pxBuf = new Color32[1]; // 1-pixel buffer
 
-    // Публичный доступ для ресиверов
-    private Color _lastSampled = Color.white;  // СЫРОЙ цвет из текстуры без обработки
+    // Public raw color for receivers
+    private Color _lastSampled = Color.white;  // RAW color from texture (no processing)
     public Color GetLastColorRaw() { return _lastSampled; }
 
     void Start()
@@ -48,13 +48,13 @@ public class PixelColorController : UdonSharpBehaviour
 
         if (sampleEveryNFrames < 1) sampleEveryNFrames = 1;
 
-        // 1×1 RT (ARGB32 sRGB) — сырая выборка
+        // Create 1×1 RT (ARGB32 sRGB) for raw sampling
         _rt1x1 = new RenderTexture(1, 1, 0, RenderTextureFormat.ARGB32, RenderTextureReadWrite.sRGB);
         _rt1x1.wrapMode = TextureWrapMode.Clamp;
         _rt1x1.filterMode = FilterMode.Point;
         _rt1x1.Create();
 
-        // Debug-превью: показываем сырую 1×1 RT (без обработки)
+        // Optional debug preview
         if (debugPreviewReceiver != null)
         {
             var mpb = new MaterialPropertyBlock();
@@ -76,29 +76,25 @@ public class PixelColorController : UdonSharpBehaviour
     {
         _frame++;
 
-        if ((_frame % sampleEveryNFrames) != 0)
-        {
-            return;
-        }
+        if ((_frame % sampleEveryNFrames) != 0) return;
+        if (_readbackPending || sourceRT == null) return;
 
-        if (_readbackPending || sourceRT == null) { return; }
-
-        // передаём UV и ИСТОЧНИК в материал (важно!)
+        // Feed UV and SOURCE into the material
         float u = Mathf.Clamp01(uv.x);
         float v = Mathf.Clamp01(uv.y);
         pickUVMaterial.SetVector("_UV", new Vector4(u, v, 0, 0));
         pickUVMaterial.SetTexture("_MainTex", sourceRT);
 
-        // Udon-совместимый Blit (с явным pass=0)
+        // Udon-compatible Blit (explicit pass = 0) into 1×1 RT
         VRCGraphics.Blit(sourceRT, _rt1x1, pickUVMaterial, 0);
 
-        // Асинхронное чтение 1 пикселя (из сырой 1x1 RT)
+        // Async GPU readback of the 1×1 pixel
         _readbackPending = true;
         if (debugLog && (Time.frameCount % 30 == 0)) Debug.Log("[PixelColorController] Request readback");
-        VRCAsyncGPUReadback.Request(_rt1x1, 0, (IUdonEventReceiver)this);
+        VRCAsyncGPUReadback.Request(_rt1x1, 0, (VRC.Udon.Common.Interfaces.IUdonEventReceiver)this);
     }
 
-    // колбэки readback (под разные версии SDK)
+    // Readback callbacks (SDK variants)
     public void OnAsyncGpuReadbackComplete(VRCAsyncGPUReadbackRequest request) { HandleReadback(request); }
     public void OnAsyncGPUReadbackComplete(VRCAsyncGPUReadbackRequest request) { HandleReadback(request); }
 
@@ -118,7 +114,7 @@ public class PixelColorController : UdonSharpBehaviour
             return;
         }
 
-        // сырой цвет 1×1
+        // Store RAW color (no processing here)
         Color32 c32 = _pxBuf[0];
         _lastSampled = new Color(c32.r / 255f, c32.g / 255f, c32.b / 255f, 1f);
 
